@@ -1,7 +1,9 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
+  outputFileTracingRoot: path.join(__dirname),
   
   // Image optimization
   images: {
@@ -83,3 +85,4 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
+

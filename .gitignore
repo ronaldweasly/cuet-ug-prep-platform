@@ -1,10 +1,9 @@
 # dependencies
-/app/node_modules
 /node_modules
 
 # Next.js build outputs
-/app/.next/
-/app/out/
+/.next/
+/out/
 
 # IDE and OS files
 .DS_Store
