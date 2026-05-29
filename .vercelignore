@@ -1,0 +1,2 @@
+# Ignore local dev-only python processing scripts in Vercel build scans
+scripts/
