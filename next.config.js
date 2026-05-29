@@ -1,3 +1,4 @@
+// Next.js configuration for CUET UG Prep Platform - optimized for Vercel deployment
 const path = require('path');
 
 /** @type {import('next').NextConfig} */
