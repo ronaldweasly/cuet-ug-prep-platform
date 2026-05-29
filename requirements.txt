@@ -1,0 +1,29 @@
+# Python dependencies for CUET Data Collection & Processing
+
+# PDF Processing
+pdfplumber>=0.10.0        # Best for structured text extraction
+PyPDF2>=3.0.0             # Fallback PDF reader
+pytesseract>=0.3.10       # OCR for scanned PDFs (optional)
+Pillow>=10.0.0            # Image processing for OCR
+
+# Data handling
+pandas>=2.0.0             # Data analysis and manipulation
+openpyxl>=3.1.0          # Excel export
+python-dotenv>=1.0.0      # Environment variables
+
+# Utilities
+requests>=2.31.0          # HTTP requests for fetching PDFs
+tqdm>=4.66.0              # Progress bars
+click>=8.1.0              # CLI interface
+
+# Database
+psycopg2-binary>=2.9.0    # PostgreSQL adapter
+sqlalchemy>=2.0.0         # ORM for Python
+
+# Logging and debugging
+python-json-logger>=2.0.7 # JSON logging
+
+# Optional: Advanced features
+spacy>=3.7.0              # NLP for question classification
+langdetect>=1.0.9         # Language detection
+openai>=1.0.0             # AI-powered question analysis (optional)

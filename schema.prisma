@@ -1,0 +1,522 @@
+// CUET Platform Database Schema
+// Using Prisma ORM with PostgreSQL
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ========================================
+// CORE MODELS
+// ========================================
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  password      String     // Hash bcrypt
+  name          String?
+  avatar        String?
+  role          Role       @default(STUDENT)
+  
+  // Student Progress
+  testAttempts  TestAttempt[]
+  userStats     UserStats?
+  xpHistory     XPHistory[]
+  achievements  Achievement[]
+  
+  // Admin features
+  uploadedTests Test[]     @relation("CreatedBy")
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  lastLoginAt   DateTime?
+  
+  @@index([email])
+  @@index([role])
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+  INSTRUCTOR
+}
+
+// ========================================
+// QUESTION BANK MODELS
+// ========================================
+
+model Question {
+  id            String     @id @default(cuid())
+  subject       Subject
+  chapter       String?
+  topic         String?
+  
+  // Question content
+  questionText  String     @db.Text
+  options       Option[]
+  correctAnswer String     // A, B, C, D
+  explanation   String?    @db.Text
+  solutionVideo String?    // YouTube URL or video path
+  
+  // Metadata
+  year          Int        // 2022, 2023, 2024, 2025
+  source        String     // NTA, Vedantu, Allen, etc
+  difficulty    Difficulty
+  questionType  QuestionType
+  isPYQ         Boolean    @default(true) // True if official PYQ
+  pageNumber    Int?
+  
+  // Relationships
+  testQuestions TestQuestion[]
+  userAnswers   UserAnswer[]
+  tags          String[]
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@index([subject])
+  @@index([chapter])
+  @@index([difficulty])
+  @@index([year])
+  @@index([isPYQ])
+  @@fulltext([questionText]) // For full-text search
+}
+
+model Option {
+  id        String   @id @default(cuid())
+  key       String   // A, B, C, D
+  text      String   @db.Text
+  question  Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  questionId String
+  
+  @@unique([questionId, key])
+  @@index([questionId])
+}
+
+enum Subject {
+  BUSINESS_STUDIES
+  ECONOMICS
+  ENGLISH
+  GENERAL_TEST
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  READING_COMPREHENSION
+  NUMERICAL
+  ASSERTION_REASON
+  FILL_BLANKS
+  MATCHING
+  UNKNOWN
+}
+
+// ========================================
+// TEST & EXAM MODELS
+// ========================================
+
+model Test {
+  id            String     @id @default(cuid())
+  title         String
+  description   String?    @db.Text
+  
+  // Test configuration
+  subjects      Subject[]
+  totalQuestions Int
+  duration      Int        // Minutes
+  passingScore  Int        // Percentage
+  shuffle       Boolean    @default(true)
+  showAnswers   Boolean    @default(false)
+  randomize     Boolean    @default(true)
+  
+  // Structure
+  questions     TestQuestion[]
+  
+  // Metadata
+  testType      TestType
+  difficulty    Difficulty
+  isPublished   Boolean    @default(false)
+  attempts      TestAttempt[]
+  
+  createdBy     User?      @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById   String?
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@index([isPublished])
+  @@index([testType])
+}
+
+enum TestType {
+  FULL_LENGTH
+  SECTION
+  CHAPTER_WISE
+  MOCK
+  PRACTICE
+  DIAGNOSTIC
+}
+
+model TestQuestion {
+  id          String   @id @default(cuid())
+  test        Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  testId      String
+  question    Question @relation(fields: [questionId], references: [id])
+  questionId  String
+  
+  // Position in test
+  order       Int      // Question order in test
+  marks       Int      @default(1)
+  
+  @@unique([testId, questionId])
+  @@index([testId])
+  @@index([questionId])
+}
+
+model TestAttempt {
+  id            String     @id @default(cuid())
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  test          Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
+  testId        String
+  
+  // Submission
+  startedAt     DateTime   @default(now())
+  submittedAt   DateTime?
+  duration      Int?       // Seconds taken
+  isComplete    Boolean    @default(false)
+  
+  // Scoring
+  totalMarks    Int?
+  obtainedMarks Int?
+  percentage    Float?
+  result        TestResult?
+  
+  // Details
+  answers       UserAnswer[]
+  analytics     TestAnalytics?
+  resumeToken   String?    // For resuming test
+  
+  @@index([userId])
+  @@index([testId])
+  @@index([submittedAt])
+}
+
+enum TestResult {
+  PASS
+  FAIL
+  PENDING
+}
+
+model UserAnswer {
+  id          String      @id @default(cuid())
+  attempt     TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attemptId   String
+  question    Question    @relation(fields: [questionId], references: [id])
+  questionId  String
+  
+  // Answer details
+  selectedOption String?  // A, B, C, D or null
+  isCorrect   Boolean?
+  timeSpent   Int        // Seconds
+  marked      Boolean    @default(false)
+  reviewed    Boolean    @default(false)
+  
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+  @@index([isCorrect])
+}
+
+// ========================================
+// ANALYTICS & TRACKING MODELS
+// ========================================
+
+model TestAnalytics {
+  id              String     @id @default(cuid())
+  attempt         TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attemptId       String     @unique
+  
+  // Overall stats
+  totalQuestions  Int
+  attempted       Int
+  correct         Int
+  incorrect       Int
+  skipped         Int
+  
+  // Time analysis
+  averageTime     Float      // seconds per question
+  timeDistribution Json      // {easy: 30, medium: 60, hard: 120}
+  
+  // Subject analysis
+  subjectScores   Json       // {BUSINESS_STUDIES: 85, ECONOMICS: 72, ...}
+  subjectAccuracy Json
+  subjectTiming   Json
+  
+  // Difficulty analysis
+  difficultyScores Json      // {EASY: 95, MEDIUM: 70, HARD: 40}
+  
+  // Question type analysis
+  questionTypeScores Json
+  
+  // Percentile prediction
+  estimatedPercentile Float?
+  estimatedScore    Float?
+  
+  createdAt       DateTime   @default(now())
+}
+
+model UserStats {
+  id                String   @id @default(cuid())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String   @unique
+  
+  // Aggregate stats
+  totalTestsTaken   Int      @default(0)
+  averageScore      Float    @default(0)
+  averagePercentage Float    @default(0)
+  bestScore         Float?
+  
+  // Subject mastery (%)
+  businessStudiesMastery Float @default(0)
+  economicsMastery Float      @default(0)
+  englishMastery   Float      @default(0)
+  generalTestMastery Float    @default(0)
+  
+  // Weak topics
+  weakTopics        String[] // Stored as array of topic names
+  strongTopics      String[]
+  
+  // Streaks
+  currentStreak     Int      @default(0)
+  longestStreak     Int      @default(0)
+  
+  lastUpdated       DateTime   @updatedAt
+}
+
+model XPHistory {
+  id            String   @id @default(cuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  
+  points        Int
+  source        XPSource
+  description   String?
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum XPSource {
+  TEST_COMPLETION
+  STREAK
+  FIRST_ATTEMPT
+  PERFECT_SCORE
+  WEAK_TOPIC_PRACTICE
+  ACHIEVEMENT
+  DAILY_GOAL
+  LEADERBOARD
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  
+  badge       AchievementType
+  earnedAt    DateTime @default(now())
+  
+  @@unique([userId, badge])
+  @@index([userId])
+}
+
+enum AchievementType {
+  FIRST_TEST
+  TEST_MASTER       // 50 tests
+  PERFECT_SCORE     // 100% in a test
+  STREAK_7         // 7-day streak
+  STREAK_30        // 30-day streak
+  SUBJECT_EXPERT   // 95%+ in a subject
+  TIME_MASTER      // Complete test in half the time
+  QUICK_LEARNER    // 100 questions without mistakes
+  LEADERBOARD_TOP10
+  LEADERBOARD_TOP50
+}
+
+// ========================================
+// GAMIFICATION MODELS
+// ========================================
+
+model Leaderboard {
+  id            String    @id @default(cuid())
+  displayName   String
+  totalXP       Int
+  level         Int
+  rank          Int?
+  
+  // Metrics
+  testsTaken    Int
+  totalMarks    Int
+  avgPercentage Float
+  streak        Int
+  
+  // User data (cached)
+  userId        String
+  userEmail     String
+  
+  // Period
+  period        LeaderboardPeriod
+  updatedAt     DateTime  @updatedAt
+  
+  @@unique([period, userId])
+  @@index([period])
+  @@index([totalXP])
+  @@index([level])
+}
+
+enum LeaderboardPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ALL_TIME
+}
+
+// ========================================
+// ADMIN & CONTENT MODELS
+// ========================================
+
+model PDFUpload {
+  id          String   @id @default(cuid())
+  filename    String
+  subject     Subject
+  year        Int
+  source      String
+  
+  // Processing status
+  status      ProcessingStatus @default(PENDING)
+  progress    Int      @default(0) // 0-100
+  
+  // Results
+  questionsExtracted Int @default(0)
+  errors      String[] // Error messages
+  
+  uploadedAt  DateTime @default(now())
+  processedAt DateTime?
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model StudyResource {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  
+  subject     Subject
+  chapter     String?
+  
+  // Content
+  contentType ResourceType
+  contentUrl  String
+  
+  // Metadata
+  author      String?
+  sourceUrl   String?
+  isPremium   Boolean @default(false)
+  
+  createdAt   DateTime @default(now())
+}
+
+enum ResourceType {
+  PDF
+  VIDEO
+  ARTICLE
+  NOTES
+  BOOK
+  MOCK_TEST
+  SOLUTION
+  SUMMARY
+}
+
+// ========================================
+// ADMIN MODELS
+// ========================================
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  action    String
+  details   Json?
+  performed DateTime @default(now())
+}
+
+model ContentModeration {
+  id        String    @id @default(cuid())
+  type      String    // 'question', 'test', 'comment'
+  contentId String
+  
+  status    ModerationStatus
+  feedback  String?
+  
+  reviewedBy String?
+  reviewedAt DateTime?
+  
+  createdAt DateTime @default(now())
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_REVISION
+}
+
+// ========================================
+// SESSION & CACHE MODELS
+// ========================================
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String   @db.Text
+  expiresAt DateTime
+}
+
+model Cache {
+  id        String   @id
+  value     String   @db.Text
+  expiresAt DateTime
+  
+  @@index([expiresAt])
+}
+
+// ========================================
+// AUDIT MODELS
+// ========================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  entity    String
+  action    String   // CREATE, UPDATE, DELETE
+  entityId  String
+  changes   Json?
+  userId    String?
+  timestamp DateTime @default(now())
+  
+  @@index([entity])
+  @@index([timestamp])
+}
